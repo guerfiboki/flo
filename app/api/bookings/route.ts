@@ -95,22 +95,22 @@ export async function POST(req: NextRequest) {
 
       const totalPrice = calculateTotalPrice(listing.pricePerNight, checkIn, checkOut)
 
-      return tx.booking.create({
-        data: {
-          listingId: listing.id,
-          userId: (session.user as any).id,
-          checkIn,
-          checkOut,
-          guests: data.guests,
-          totalPrice,
-          pricePerNightSnapshot: listing.pricePerNight, // ✅ FIX ADDED HERE
-          guestName: data.guestName,
-          guestEmail: data.guestEmail,
-          guestPhone: data.guestPhone,
-          notes: data.notes,
-          status: 'PENDING',
-        },
-      })
+return tx.booking.create({
+  data: {
+    listingId: listing.id,
+    userId: (session.user as any).id,
+    checkIn,
+    checkOut,
+    guests: data.guests,
+    totalPrice,
+    pricePerNightSnapshot: listing.pricePerNight, // ✅ REQUIRED FIX
+    guestName: data.guestName,
+    guestEmail: data.guestEmail,
+    guestPhone: data.guestPhone,
+    notes: data.notes,
+    status: 'PENDING',
+  },
+})
     }, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       timeout: 5000,
