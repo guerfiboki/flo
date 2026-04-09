@@ -1,6 +1,12 @@
 // file: app/layout.tsx
 import type { Metadata } from 'next'
-import { Playfair_Display, DM_Sans } from 'next/font/google'
+import { Playfair_Display } from 'next/font/google'
+
+export const playfair = Playfair_Display({
+  subsets: ['latin'],
+  display: 'swap',
+  preload: true,
+})
 import './globals.css'
 import { Providers } from './providers'
 import { Navbar } from '@/components/Navbar'
