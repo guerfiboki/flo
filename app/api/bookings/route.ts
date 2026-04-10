@@ -1,4 +1,3 @@
-// file: app/api/bookings/route.ts — FIXED VERSION
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
@@ -9,9 +8,9 @@ import { z } from 'zod'
 import { startOfDay } from 'date-fns'
 
 const bookingSchema = z.object({
-  listingId: z.string().cuid('Invalid listing ID'),
-  checkIn: z.string().datetime('Invalid check-in date'),
-  checkOut: z.string().datetime('Invalid check-out date'),
+  listingId: z.string().cuid(),
+  checkIn: z.string().datetime(),
+  checkOut: z.string().datetime(),
   guests: z.number().int().positive().max(50),
   guestName: z.string().min(2).max(100),
   guestEmail: z.string().email().max(255),
@@ -21,6 +20,7 @@ const bookingSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
+
   if (!session) {
     return NextResponse.json({ error: 'Please log in to book' }, { status: 401 })
   }
@@ -49,8 +49,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Check-out must be after check-in' }, { status: 400 })
   }
 
-  const MS_PER_DAY = 86_400_000
-  const nights = (checkOut.getTime() - checkIn.getTime()) / MS_PER_DAY
+  const nights =
+    (checkOut.getTime() - checkIn.getTime()) / 86_400_000
+
   if (nights > 365) {
     return NextResponse.json({ error: 'Booking cannot exceed 365 nights' }, { status: 400 })
   }
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
         where: { id: data.listingId },
       })
 
-      if (!listing || !listing.active) {
+      if (!listing?.active) {
         throw new Error('LISTING_NOT_FOUND')
       }
 
@@ -93,24 +94,31 @@ export async function POST(req: NextRequest) {
         throw new Error('DATES_UNAVAILABLE')
       }
 
-      const totalPrice = calculateTotalPrice(listing.pricePerNight, checkIn, checkOut)
+      const totalPrice = calculateTotalPrice(
+        listing.pricePerNight,
+        checkIn,
+        checkOut
+      )
 
-return tx.booking.create({
-  data: {
-    listingId: listing.id,
-    userId: (session.user as any).id,
-    checkIn,
-    checkOut,
-    guests: data.guests,
-    totalPrice,
-    pricePerNightSnapshot: listing.pricePerNight, // ✅ REQUIRED FIX
-    guestName: data.guestName,
-    guestEmail: data.guestEmail,
-    guestPhone: data.guestPhone,
-    notes: data.notes,
-    status: 'PENDING',
-  },
-})
+      // ✅ FINAL FIX: Prisma-safe object
+      const bookingData = {
+        listingId: listing.id,
+        userId: (session.user as any).id,
+        checkIn,
+        checkOut,
+        guests: data.guests,
+        totalPrice,
+        pricePerNightSnapshot: listing.pricePerNight,
+        guestName: data.guestName,
+        guestEmail: data.guestEmail,
+        guestPhone: data.guestPhone ?? null,
+        notes: data.notes ?? null,
+        status: 'PENDING' as const,
+      }
+
+      return tx.booking.create({
+        data: bookingData,
+      })
     }, {
       isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
       timeout: 5000,
@@ -125,15 +133,20 @@ return tx.booking.create({
       DATES_UNAVAILABLE: ['These dates are not available', 409],
     }
 
-    const [message, status] = errorMap[err?.message] ?? ['Booking failed. Please try again.', 500]
+    const [message, status] =
+      errorMap[err?.message] ?? ['Booking failed. Please try again.', 500]
+
     console.error('Booking error:', err)
+
     return NextResponse.json({ error: message }, { status })
   }
 }
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const userId = (session.user as any).id
   const isAdmin = (session.user as any).role === 'ADMIN'
@@ -146,20 +159,29 @@ export async function GET(req: NextRequest) {
     prisma.booking.findMany({
       where: isAdmin ? {} : { userId },
       include: {
-        listing: { select: { title: true, slug: true, location: true, images: true } },
-        payment: true
+        listing: {
+          select: {
+            title: true,
+            slug: true,
+            location: true,
+            images: true,
+          },
+        },
+        payment: true,
       },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
     }),
-    prisma.booking.count({ where: isAdmin ? {} : { userId } }),
+    prisma.booking.count({
+      where: isAdmin ? {} : { userId },
+    }),
   ])
 
   return NextResponse.json({
     bookings,
     total,
     page,
-    pages: Math.ceil(total / limit)
+    pages: Math.ceil(total / limit),
   })
 }
